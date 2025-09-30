@@ -2,7 +2,6 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { useDeviceDetection } from './hooks/useDeviceDetection';
 import TabletInterface from './components/TabletInterface';
 import PhoneInterface from './components/PhoneInterface';
-import VideoWatch from './components/VideoWatch';
 import SimpleVideoWatch from './components/SimpleVideoWatch';
 
 function App() {
