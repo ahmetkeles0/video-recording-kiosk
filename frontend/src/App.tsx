@@ -3,6 +3,7 @@ import { useDeviceDetection } from './hooks/useDeviceDetection';
 import TabletInterface from './components/TabletInterface';
 import PhoneInterface from './components/PhoneInterface';
 import VideoWatch from './components/VideoWatch';
+import SimpleVideoWatch from './components/SimpleVideoWatch';
 
 function App() {
   useDeviceDetection();
@@ -18,7 +19,7 @@ function App() {
           <Route path="/record" element={<PhoneInterface />} />
           
           {/* Video watch page - for QR code results */}
-          <Route path="/watch" element={<VideoWatch />} />
+          <Route path="/watch" element={<SimpleVideoWatch />} />
         </Routes>
       </div>
     </Router>

@@ -5,6 +5,7 @@ const VideoWatch: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const url = searchParams.get('url');
@@ -25,12 +26,25 @@ const VideoWatch: React.FC = () => {
     };
 
     try {
+      // Check if Web Share API is available and can share URLs
       if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
         await navigator.share(shareData);
       } else {
-        // Fallback: copy to clipboard
-        await navigator.clipboard.writeText(videoUrl);
-        alert('Video URL kopyalandı!');
+        // For iOS Safari, try to trigger the share sheet with a direct link
+        if (navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad')) {
+          // Create a temporary link and trigger download/share
+          const link = document.createElement('a');
+          link.href = videoUrl;
+          link.download = `video-kiosk-${Date.now()}.webm`;
+          link.style.display = 'none';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          // Fallback: copy to clipboard
+          await navigator.clipboard.writeText(videoUrl);
+          alert('Video URL kopyalandı!');
+        }
       }
     } catch (err) {
       console.error('Share error:', err);
@@ -105,6 +119,15 @@ const VideoWatch: React.FC = () => {
     return (
       <div className="card">
         <div className="loading"></div>
+        <p>Video URL bulunuyor...</p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="card">
+        <div className="loading"></div>
         <p>Video yükleniyor...</p>
       </div>
     );
@@ -121,6 +144,20 @@ const VideoWatch: React.FC = () => {
         crossOrigin="anonymous"
         className="video-preview"
         style={{ width: '100%', maxWidth: '400px' }}
+        onError={(e) => {
+          console.error('Video load error:', e);
+          setError('Video yüklenirken hata oluştu. Lütfen tekrar deneyin.');
+          setIsLoading(false);
+        }}
+        onLoadStart={() => {
+          console.log('Video loading started');
+          setIsLoading(true);
+        }}
+        onCanPlay={() => {
+          console.log('Video can play');
+          setIsLoading(false);
+        }}
+        preload="metadata"
       />
 
       <div style={{ marginTop: '1rem' }}>
@@ -143,6 +180,13 @@ const VideoWatch: React.FC = () => {
         <strong>Video URL:</strong><br />
         <small style={{ wordBreak: 'break-all' }}>
           {videoUrl}
+        </small>
+        <br /><br />
+        <strong>Debug Info:</strong><br />
+        <small>
+          User Agent: {navigator.userAgent.includes('iPhone') ? 'iPhone' : navigator.userAgent.includes('iPad') ? 'iPad' : 'Other'}<br />
+          Share API: {typeof navigator.share === 'function' ? 'Available' : 'Not Available'}<br />
+          Clipboard API: {navigator.clipboard ? 'Available' : 'Not Available'}
         </small>
       </div>
     </div>
