@@ -6,6 +6,26 @@ import uploadRoutes from './routes/upload';
 import { config } from './config/env';
 import { SocketEvents, DeviceRegistration, StartRecordEvent, RecordingReadyEvent } from './types';
 
+// Enhanced logging utility
+const logger = {
+  info: (message: string, data?: any) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [INFO] ${message}`, data ? JSON.stringify(data, null, 2) : '');
+  },
+  error: (message: string, error?: any) => {
+    const timestamp = new Date().toISOString();
+    console.error(`[${timestamp}] [ERROR] ${message}`, error ? JSON.stringify(error, null, 2) : '');
+  },
+  warn: (message: string, data?: any) => {
+    const timestamp = new Date().toISOString();
+    console.warn(`[${timestamp}] [WARN] ${message}`, data ? JSON.stringify(data, null, 2) : '');
+  },
+  debug: (message: string, data?: any) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [DEBUG] ${message}`, data ? JSON.stringify(data, null, 2) : '');
+  }
+};
+
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
@@ -29,6 +49,11 @@ app.use('/api', uploadRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
+  logger.info('Health check requested', { 
+    ip: req.ip, 
+    userAgent: req.get('User-Agent'),
+    connectedDevices: connectedDevices.size 
+  });
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
@@ -37,14 +62,25 @@ const connectedDevices = new Map<string, { deviceType: string; socketId: string 
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log(`Client connected: ${socket.id}`);
+  logger.info('Client connected', { 
+    socketId: socket.id, 
+    ip: socket.handshake.address,
+    userAgent: socket.handshake.headers['user-agent'],
+    totalConnections: io.sockets.sockets.size 
+  });
 
   // Register device
   socket.on('register-device', (data: DeviceRegistration) => {
     const { deviceType, deviceId } = data;
     connectedDevices.set(deviceId, { deviceType, socketId: socket.id });
     
-    console.log(`Device registered: ${deviceType} (${deviceId})`);
+    logger.info('Device registered', { 
+      deviceType, 
+      deviceId, 
+      socketId: socket.id,
+      totalDevices: connectedDevices.size,
+      deviceList: Array.from(connectedDevices.keys())
+    });
     
     socket.emit('device-registered', { 
       success: true, 
@@ -54,7 +90,16 @@ io.on('connection', (socket) => {
 
   // Start recording (tablet -> phone)
   socket.on('start-record', (data: StartRecordEvent) => {
-    console.log(`Start record request: ${data.deviceId}`);
+    logger.info('Start record request received', { 
+      requestDeviceId: data.deviceId,
+      timestamp: data.timestamp,
+      requestSocketId: socket.id,
+      availableDevices: Array.from(connectedDevices.entries()).map(([id, device]) => ({
+        deviceId: id,
+        deviceType: device.deviceType,
+        socketId: device.socketId
+      }))
+    });
     
     // Find phone device
     const phoneDevice = Array.from(connectedDevices.entries())
@@ -66,17 +111,34 @@ io.on('connection', (socket) => {
       
       if (phoneSocket) {
         phoneSocket.emit('start-record', data);
-        console.log(`Start record sent to phone: ${deviceId}`);
+        logger.info('Start record command sent to phone', { 
+          targetDeviceId: deviceId,
+          targetSocketId: deviceInfo.socketId,
+          commandData: data
+        });
+      } else {
+        logger.error('Phone socket not found', { 
+          deviceId, 
+          socketId: deviceInfo.socketId,
+          availableSockets: Array.from(io.sockets.sockets.keys())
+        });
+        socket.emit('error', { message: 'Phone device socket not found' });
       }
     } else {
-      console.log('No phone device connected');
+      logger.warn('No phone device connected', { 
+        availableDevices: Array.from(connectedDevices.entries()),
+        totalDevices: connectedDevices.size
+      });
       socket.emit('error', { message: 'No phone device connected' });
     }
   });
 
   // Stop recording (tablet -> phone)
   socket.on('stop-record', (data) => {
-    console.log(`Stop record request: ${data.deviceId}`);
+    logger.info('Stop record request received', { 
+      requestDeviceId: data.deviceId,
+      requestSocketId: socket.id
+    });
     
     // Find phone device
     const phoneDevice = Array.from(connectedDevices.entries())
@@ -88,14 +150,30 @@ io.on('connection', (socket) => {
       
       if (phoneSocket) {
         phoneSocket.emit('stop-record', data);
-        console.log(`Stop record sent to phone: ${deviceId}`);
+        logger.info('Stop record command sent to phone', { 
+          targetDeviceId: deviceId,
+          targetSocketId: deviceInfo.socketId,
+          commandData: data
+        });
+      } else {
+        logger.error('Phone socket not found for stop command', { 
+          deviceId, 
+          socketId: deviceInfo.socketId
+        });
       }
+    } else {
+      logger.warn('No phone device connected for stop command');
     }
   });
 
   // Recording ready (phone -> tablet)
   socket.on('recording-ready', (data: RecordingReadyEvent) => {
-    console.log(`Recording ready: ${data.videoUrl}`);
+    logger.info('Recording ready notification received', { 
+      videoUrl: data.videoUrl,
+      deviceId: data.deviceId,
+      timestamp: data.timestamp,
+      phoneSocketId: socket.id
+    });
     
     // Find tablet device
     const tabletDevice = Array.from(connectedDevices.entries())
@@ -107,20 +185,44 @@ io.on('connection', (socket) => {
       
       if (tabletSocket) {
         tabletSocket.emit('video-uploaded', data);
-        console.log(`Video URL sent to tablet: ${deviceId}`);
+        logger.info('Video URL sent to tablet', { 
+          targetDeviceId: deviceId,
+          targetSocketId: deviceInfo.socketId,
+          videoUrl: data.videoUrl
+        });
+      } else {
+        logger.error('Tablet socket not found', { 
+          deviceId, 
+          socketId: deviceInfo.socketId,
+          availableSockets: Array.from(io.sockets.sockets.keys())
+        });
       }
+    } else {
+      logger.warn('No tablet device connected for video upload', { 
+        availableDevices: Array.from(connectedDevices.entries()),
+        videoUrl: data.videoUrl
+      });
     }
   });
 
   // Handle disconnection
-  socket.on('disconnect', () => {
-    console.log(`Client disconnected: ${socket.id}`);
+  socket.on('disconnect', (reason) => {
+    logger.info('Client disconnected', { 
+      socketId: socket.id, 
+      reason,
+      totalConnections: io.sockets.sockets.size,
+      connectedDevicesBefore: Array.from(connectedDevices.keys())
+    });
     
     // Remove device from connected devices
     for (const [deviceId, device] of connectedDevices.entries()) {
       if (device.socketId === socket.id) {
         connectedDevices.delete(deviceId);
-        console.log(`Device removed: ${deviceId}`);
+        logger.info('Device removed from registry', { 
+          deviceId, 
+          deviceType: device.deviceType,
+          remainingDevices: Array.from(connectedDevices.keys())
+        });
         break;
       }
     }
@@ -130,9 +232,13 @@ io.on('connection', (socket) => {
 // Start server
 const PORT = config.port;
 server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📱 Tablet URL: ${config.frontend.tabletUrl}`);
-  console.log(`📱 Phone URL: ${config.frontend.phoneUrl}`);
+  logger.info('🚀 Server started successfully', {
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development',
+    tabletUrl: config.frontend.tabletUrl,
+    phoneUrl: config.frontend.phoneUrl,
+    corsOrigins: [config.frontend.tabletUrl, config.frontend.phoneUrl, 'http://localhost:5173', 'https://localhost:5173']
+  });
 });
 
 export default app;
