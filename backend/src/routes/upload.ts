@@ -130,12 +130,9 @@ router.post('/upload', async (req, res) => {
       timestamp: new Date().toISOString()
     });
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('video-kiosk')
-      .getPublicUrl(filePath);
-
-    const videoUrl = urlData.publicUrl;
+    // Generate a backend URL instead of direct Supabase URL
+    // This ensures proper CORS and authentication handling
+    const videoUrl = `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/video/${uniqueFilename}`;
 
     const totalDuration = Date.now() - startTime;
 
@@ -173,11 +170,11 @@ router.post('/upload', async (req, res) => {
   }
 });
 
-// Get video metadata
+// Stream video from Supabase Storage
 router.get('/video/:filename', async (req, res) => {
   const requestId = uuidv4();
   
-  logger.info('Get video request received', {
+  logger.info('📹 VIDEO STREAM REQUEST', {
     requestId,
     filename: req.params.filename,
     ip: req.ip,
@@ -188,38 +185,89 @@ router.get('/video/:filename', async (req, res) => {
     const { filename } = req.params;
     const filePath = `videos/${filename}`;
 
-    logger.debug('Getting video URL from Supabase', {
+    logger.debug('🔍 FETCHING VIDEO FROM SUPABASE', {
       requestId,
       filename,
       filePath
     });
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
+    // Download the file from Supabase Storage
+    const { data, error } = await supabase.storage
       .from('video-kiosk')
-      .getPublicUrl(filePath);
+      .download(filePath);
 
-    logger.info('Video URL retrieved successfully', {
+    if (error) {
+      logger.error('❌ SUPABASE DOWNLOAD FAILED', {
+        requestId,
+        error: error.message,
+        filename,
+        filePath
+      });
+      return res.status(404).json({
+        success: false,
+        error: 'Video not found'
+      });
+    }
+
+    if (!data) {
+      logger.error('❌ NO VIDEO DATA', {
+        requestId,
+        filename,
+        filePath
+      });
+      return res.status(404).json({
+        success: false,
+        error: 'Video data not available'
+      });
+    }
+
+    // Convert blob to buffer
+    const buffer = await data.arrayBuffer();
+    
+    logger.info('✅ VIDEO STREAMING SUCCESSFUL', {
       requestId,
       filename,
-      videoUrl: urlData.publicUrl
+      fileSize: buffer.byteLength,
+      fileSizeMB: Math.round(buffer.byteLength / 1024 / 1024 * 100) / 100
     });
 
-    res.json({
-      success: true,
-      videoUrl: urlData.publicUrl,
-      filename,
-    });
+    // Set appropriate headers for video streaming
+    res.setHeader('Content-Type', 'video/webm');
+    res.setHeader('Content-Length', buffer.byteLength);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
+    res.setHeader('Access-Control-Allow-Headers', 'Range');
+
+    // Handle range requests for video seeking
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : buffer.byteLength - 1;
+      const chunksize = (end - start) + 1;
+      
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${buffer.byteLength}`);
+      res.setHeader('Content-Length', chunksize);
+      
+      res.end(Buffer.from(buffer.slice(start, end + 1)));
+    } else {
+      res.end(Buffer.from(buffer));
+    }
+
   } catch (error) {
-    logger.error('Get video failed', {
+    logger.error('💥 VIDEO STREAM ERROR', {
       requestId,
-      filename: req.params.filename,
       error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
+      stack: error instanceof Error ? error.stack : undefined,
+      filename: req.params.filename
     });
+    
     res.status(500).json({
       success: false,
-      error: 'Failed to get video',
+      error: 'Failed to stream video'
     });
   }
 });
