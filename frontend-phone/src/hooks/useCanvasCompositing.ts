@@ -96,7 +96,7 @@ export const useCanvasCompositing = (): UseCanvasCompositingReturn => {
   const startCompositing = useCallback(async (videoStream: MediaStream): Promise<MediaStream> => {
     // Wait for canvas to be available
     let attempts = 0;
-    const maxAttempts = 50; // 5 seconds max wait
+    const maxAttempts = 100; // 10 seconds max wait for production
     
     while (!canvasRef.current && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -117,10 +117,14 @@ export const useCanvasCompositing = (): UseCanvasCompositingReturn => {
     
     videoElementRef.current = video;
 
-    // Pre-load logo
-    await loadLogo().catch(error => {
+    // Pre-load logo with better error handling
+    try {
+      await loadLogo();
+      console.log('Logo pre-loaded successfully');
+    } catch (error) {
       console.error('Error pre-loading logo:', error);
-    });
+      // Continue without logo if loading fails
+    }
 
     // Wait for video to be ready and playing
     await new Promise((resolve) => {
