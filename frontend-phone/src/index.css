@@ -248,3 +248,29 @@ body {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(66, 153, 225, 0.6);
 }
+
+/* Permission warnings */
+.permission-warning {
+  background: #fed7d7;
+  border: 1px solid #feb2b2;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+  color: #c53030;
+}
+
+.permission-info {
+  background: #bee3f8;
+  border: 1px solid #90cdf4;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+  color: #2b6cb0;
+}
+
+.permission-warning p,
+.permission-info p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}

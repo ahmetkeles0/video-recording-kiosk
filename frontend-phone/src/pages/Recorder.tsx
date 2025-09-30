@@ -31,6 +31,30 @@ const Recorder: React.FC = () => {
   const [status, setStatus] = useState('Bağlanıyor...');
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [permissionStatus, setPermissionStatus] = useState<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown');
+
+  // Check camera/microphone permissions on mount
+  useEffect(() => {
+    const checkPermissions = async () => {
+      try {
+        const cameraPermission = await navigator.permissions.query({ name: 'camera' as PermissionName });
+        const micPermission = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+        
+        if (cameraPermission.state === 'granted' && micPermission.state === 'granted') {
+          setPermissionStatus('granted');
+        } else if (cameraPermission.state === 'denied' || micPermission.state === 'denied') {
+          setPermissionStatus('denied');
+        } else {
+          setPermissionStatus('prompt');
+        }
+      } catch (error) {
+        console.log('Permission API not supported');
+        setPermissionStatus('unknown');
+      }
+    };
+    
+    checkPermissions();
+  }, []);
 
   useEffect(() => {
     if (isConnected && !isRegistered) {
@@ -170,6 +194,18 @@ const Recorder: React.FC = () => {
       <div className={`status ${isRecording ? 'recording' : isUploading ? 'uploading' : isRegistered ? 'ready' : ''}`}>
         {status}
       </div>
+
+      {permissionStatus === 'denied' && (
+        <div className="permission-warning">
+          <p>⚠️ Kamera ve mikrofon izni reddedildi. Lütfen tarayıcı ayarlarından izinleri etkinleştirin.</p>
+        </div>
+      )}
+
+      {permissionStatus === 'prompt' && (
+        <div className="permission-info">
+          <p>📱 Kayıt başladığında kamera ve mikrofon izni istenecek.</p>
+        </div>
+      )}
 
       {countdown !== null && countdown > 0 && (
         <div className="countdown">

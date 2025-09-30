@@ -30,14 +30,30 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
     try {
       setError(null);
       
-      // Request camera and microphone access
+      // Check if permissions are already granted
+      try {
+        const permissions = await navigator.permissions.query({ name: 'camera' as PermissionName });
+        const audioPermissions = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+        
+        console.log('Camera permission:', permissions.state);
+        console.log('Microphone permission:', audioPermissions.state);
+      } catch (permError) {
+        console.log('Permission query not supported, proceeding with getUserMedia');
+      }
+      
+      // Request camera and microphone access with more specific constraints
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
           facingMode: 'user',
+          frameRate: { ideal: 30, max: 60 }
         },
-        audio: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
       });
 
       streamRef.current = stream;
@@ -86,7 +102,20 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
 
     } catch (err) {
       console.error('Error starting recording:', err);
-      setError('Failed to access camera/microphone. Please check permissions.');
+      
+      if (err instanceof DOMException) {
+        if (err.name === 'NotAllowedError') {
+          setError('Camera/microphone access denied. Please allow permissions and refresh the page.');
+        } else if (err.name === 'NotFoundError') {
+          setError('No camera/microphone found. Please check your device.');
+        } else if (err.name === 'NotReadableError') {
+          setError('Camera/microphone is already in use by another application.');
+        } else {
+          setError(`Camera/microphone error: ${err.message}`);
+        }
+      } else {
+        setError('Failed to access camera/microphone. Please check permissions.');
+      }
     }
   }, []);
 
