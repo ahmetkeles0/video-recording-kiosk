@@ -32,9 +32,8 @@ const Recorder: React.FC = () => {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown');
-  const [shouldUpload, setShouldUpload] = useState(false);
 
-  // Send debug info to backend - use useCallback to prevent recreation
+  // Debug logger
   const sendDebugInfo = useCallback(async (type: string, data: any) => {
     const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
     try {
@@ -48,12 +47,12 @@ const Recorder: React.FC = () => {
           timestamp: new Date().toISOString()
         })
       });
-    } catch (e) {
-      // Ignore debug logging errors
+    } catch {
+      // ignore
     }
   }, [deviceId]);
 
-  // Check camera/microphone permissions on mount
+  // Check permissions on mount
   useEffect(() => {
     const checkPermissions = async () => {
       try {
@@ -74,76 +73,54 @@ const Recorder: React.FC = () => {
     };
     
     checkPermissions();
-  }, []);
+  }, [sendDebugInfo]);
 
-  // Simple upload function with useCallback to prevent recreation
+  // Upload logic
   const performUpload = useCallback(async () => {
-    sendDebugInfo('HANDLE_VIDEO_UPLOAD_CALLED', { videoUrl: !!videoUrl });
-    if (!videoUrl) {
-      sendDebugInfo('NO_VIDEO_URL_WAITING', { videoUrl: !!videoUrl });
-      // Wait a bit more for video to be ready
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      if (!videoUrl) {
-        sendDebugInfo('NO_VIDEO_URL_AFTER_WAIT', { videoUrl: !!videoUrl });
-        throw new Error('No video to upload - video URL not available');
-      }
-    }
+    if (isUploading) return; // guard
+    setIsUploading(true);
+    setStatus('Kayıt tamamlandı, yükleniyor...');
 
     try {
-      sendDebugInfo('CONVERTING_VIDEO_URL_TO_FILE', { videoUrl: !!videoUrl });
-      // Convert video URL to File
+      if (!videoUrl) {
+        sendDebugInfo('NO_VIDEO_URL', {});
+        throw new Error('No video URL available');
+      }
+
+      // Convert URL to file
       const response = await fetch(videoUrl);
       const blob = await response.blob();
       const file = new File([blob], 'recording.webm', { type: 'video/webm' });
-      sendDebugInfo('FILE_CREATED', { fileSize: file.size, fileName: file.name });
 
-      sendDebugInfo('UPLOADING_TO_BACKEND_API', { deviceId });
-      // Upload to backend API
+      sendDebugInfo('FILE_READY_FOR_UPLOAD', { size: file.size });
+
+      // Upload
       const { url, filename } = await uploadVideo(file, deviceId);
-      sendDebugInfo('UPLOAD_SUCCESSFUL', { url, filename });
 
-      // Send recording ready event
+      // Notify backend
       const recordingReady: RecordingReadyEvent = {
         videoUrl: url,
         filename,
         deviceId,
         timestamp: Date.now(),
       };
-
-      sendDebugInfo('SENDING_RECORDING_READY_EVENT', { videoUrl: url, filename });
       sendRecordingReady(recordingReady);
+
       setStatus('Video yüklendi!');
       setIsUploading(false);
-      setShouldUpload(false);
 
       // Navigate to result page
       navigate('/result', { state: { videoUrl: url, filename } });
 
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      sendDebugInfo('UPLOAD_ERROR_IN_HANDLE_VIDEO_UPLOAD', { error: errorMessage, stack: errorStack });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      sendDebugInfo('UPLOAD_FAILED', { error: msg });
       setStatus('Yükleme hatası');
       setIsUploading(false);
-      setShouldUpload(false);
     }
-  }, [videoUrl, deviceId, sendRecordingReady, navigate, sendDebugInfo]);
+  }, [videoUrl, isUploading, deviceId, sendRecordingReady, navigate, sendDebugInfo]);
 
-  // Handle upload when video is ready and shouldUpload is true
-  useEffect(() => {
-    if (shouldUpload && videoUrl && !isUploading) {
-      setIsUploading(true);
-      setStatus('Kayıt tamamlandı, yükleniyor...');
-      
-      // Call the upload function directly
-      performUpload().catch(() => {
-        setStatus('Yükleme hatası');
-        setIsUploading(false);
-        setShouldUpload(false);
-      });
-    }
-  }, [shouldUpload, videoUrl, isUploading]);
-
+  // Device registration
   useEffect(() => {
     if (isConnected && !isRegistered) {
       registerDevice('phone', deviceId);
@@ -152,7 +129,7 @@ const Recorder: React.FC = () => {
   }, [isConnected, isRegistered, deviceId, registerDevice]);
 
   useEffect(() => {
-    const cleanup = onDeviceRegistered((data) => {
+    return onDeviceRegistered((data) => {
       if (data.success) {
         setIsRegistered(true);
         setStatus('Hazır - Kayıt bekleniyor...');
@@ -160,67 +137,54 @@ const Recorder: React.FC = () => {
         setStatus('Cihaz kaydı başarısız');
       }
     });
-
-    return cleanup;
   }, [onDeviceRegistered]);
 
+  // Handle start recording
   useEffect(() => {
-    const cleanup = onStartRecord(async (data: StartRecordEvent) => {
+    return onStartRecord(async (data: StartRecordEvent) => {
       sendDebugInfo('START_RECORD_RECEIVED', { data });
       setStatus('Kayıt başlatılıyor...');
-      
+
       try {
         await startRecording();
         setStatus('Kayıt yapılıyor...');
-        
-        // Start 15-second countdown
+
+        // Start countdown
         setCountdown(15);
-        const countdownInterval = setInterval(() => {
+        const intervalId = setInterval(() => {
           setCountdown(prev => {
             if (prev === null || prev <= 1) {
-              clearInterval(countdownInterval);
+              clearInterval(intervalId);
               return null;
             }
             return prev - 1;
           });
         }, 1000);
 
-        // Auto-stop after 15 seconds
+        // Auto-stop after 15s
         const timeoutId = setTimeout(() => {
-          sendDebugInfo('15_SECOND_TIMEOUT_REACHED', { isRecording, videoUrl: !!videoUrl });
           stopRecording();
-          setStatus('Kayıt tamamlandı, yükleniyor...');
-          setShouldUpload(true); // Trigger upload when video is ready
-          sendDebugInfo('SHOULD_UPLOAD_SET_TO_TRUE', { shouldUpload: true });
-          
-          // Backup timer - try upload even if video URL not ready
+          performUpload();
+
+          // Backup attempt after 3s
           setTimeout(() => {
-            sendDebugInfo('BACKUP_UPLOAD_TIMER_TRIGGERED', { shouldUpload, isUploading });
-            if (shouldUpload && !isUploading) {
-              sendDebugInfo('ATTEMPTING_BACKUP_UPLOAD', { shouldUpload, isUploading });
-              // Call performUpload directly instead of setting state
-              performUpload().catch(() => {
-                setStatus('Yükleme hatası');
-                setIsUploading(false);
-                setShouldUpload(false);
-              });
+            if (!isUploading) {
+              performUpload();
             }
           }, 3000);
         }, 15000);
 
-        // Store timeout ID for cleanup
+        // Cleanup
         return () => {
+          clearInterval(intervalId);
           clearTimeout(timeoutId);
         };
 
       } catch (error) {
-        console.error('Recording error:', error);
         setStatus('Kayıt hatası');
       }
     });
-
-    return cleanup;
-  }, [onStartRecord, startRecording, stopRecording, isRecording]);
+  }, [onStartRecord, startRecording, stopRecording, performUpload, sendDebugInfo, isUploading]);
 
   const error = socketError || recorderError;
 
@@ -228,13 +192,8 @@ const Recorder: React.FC = () => {
     return (
       <div className="card">
         <h1 className="title">📱 Video Kiosk</h1>
-        <div className="error">
-          Hata: {error}
-        </div>
-        <button 
-          className="button" 
-          onClick={() => window.location.reload()}
-        >
+        <div className="error">Hata: {error}</div>
+        <button className="button" onClick={() => window.location.reload()}>
           Yeniden Dene
         </button>
       </div>
@@ -245,57 +204,38 @@ const Recorder: React.FC = () => {
     <div className="card">
       <h1 className="title">📱 Video Kiosk</h1>
       <p className="subtitle">iPhone Kayıt Cihazı</p>
-      
+
       <div className={`status ${isRecording ? 'recording' : isUploading ? 'uploading' : isRegistered ? 'ready' : ''}`}>
         {status}
       </div>
 
       {permissionStatus === 'denied' && (
         <div className="permission-warning">
-          <p>⚠️ Kamera ve mikrofon izni reddedildi. Lütfen tarayıcı ayarlarından izinleri etkinleştirin.</p>
+          ⚠️ Kamera ve mikrofon izni reddedildi. Lütfen tarayıcı ayarlarından izinleri etkinleştirin.
         </div>
       )}
 
       {permissionStatus === 'prompt' && (
         <div className="permission-info">
-          <p>📱 Kayıt başladığında kamera ve mikrofon izni istenecek.</p>
+          📱 Kayıt başladığında kamera ve mikrofon izni istenecek.
         </div>
       )}
 
       {countdown !== null && countdown > 0 && (
-        <div className="countdown">
-          {countdown}
-        </div>
+        <div className="countdown">{countdown}</div>
       )}
 
-      {!isConnected && (
-        <div className="loading"></div>
-      )}
+      {!isConnected && <div className="loading"></div>}
 
       <div className="video-container" style={{ display: isRecording ? 'block' : 'none' }}>
-        <canvas 
-          ref={canvasRef}
-          style={{ width: '100%', height: 'auto' }}
-        />
-        {isRecording && (
-          <div className="recording-indicator">
-            ● KAYIT
-          </div>
-        )}
+        <canvas ref={canvasRef} style={{ width: '100%', height: 'auto' }} />
+        {isRecording && <div className="recording-indicator">● KAYIT</div>}
       </div>
 
       {videoUrl && !isRecording && (
         <div>
-          <video 
-            src={videoUrl} 
-            controls 
-            className="video-preview"
-          />
-          <button 
-            className="button" 
-            onClick={clearRecording}
-            style={{ marginTop: '1rem' }}
-          >
+          <video src={videoUrl} controls className="video-preview" />
+          <button className="button" onClick={clearRecording} style={{ marginTop: '1rem' }}>
             Temizle
           </button>
         </div>
@@ -308,20 +248,17 @@ const Recorder: React.FC = () => {
         </div>
       )}
 
-      {shouldUpload && !videoUrl && !isUploading && (
-        <div className="permission-warning">
-          <p>⚠️ Video işleniyor, lütfen bekleyin...</p>
-          <button 
-            className="button" 
-            onClick={() => {
-              sendDebugInfo('MANUAL_UPLOAD_TRIGGER_CLICKED', { shouldUpload, videoUrl: !!videoUrl, isUploading });
-              setShouldUpload(true);
-            }}
-            style={{ marginTop: '1rem' }}
-          >
-            Manuel Yükleme
-          </button>
-        </div>
+      {!isUploading && videoUrl && (
+        <button
+          className="button"
+          onClick={() => {
+            sendDebugInfo('MANUAL_UPLOAD_TRIGGER', {});
+            performUpload();
+          }}
+          style={{ marginTop: '1rem' }}
+        >
+          Manuel Yükleme
+        </button>
       )}
     </div>
   );
