@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../hooks/useSocket';
 import { useVideoRecorder } from '../hooks/useVideoRecorder';
@@ -76,6 +76,58 @@ const Recorder: React.FC = () => {
     }
   };
 
+  const handleVideoUpload = useCallback(async () => {
+    sendDebugInfo('HANDLE_VIDEO_UPLOAD_CALLED', { videoUrl: !!videoUrl });
+    if (!videoUrl) {
+      sendDebugInfo('NO_VIDEO_URL_WAITING', { videoUrl: !!videoUrl });
+      // Wait a bit more for video to be ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (!videoUrl) {
+        sendDebugInfo('NO_VIDEO_URL_AFTER_WAIT', { videoUrl: !!videoUrl });
+        throw new Error('No video to upload - video URL not available');
+      }
+    }
+
+    try {
+      sendDebugInfo('CONVERTING_VIDEO_URL_TO_FILE', { videoUrl: !!videoUrl });
+      // Convert video URL to File
+      const response = await fetch(videoUrl);
+      const blob = await response.blob();
+      const file = new File([blob], 'recording.webm', { type: 'video/webm' });
+      sendDebugInfo('FILE_CREATED', { fileSize: file.size, fileName: file.name });
+
+      sendDebugInfo('UPLOADING_TO_BACKEND_API', { deviceId });
+      // Upload to backend API
+      const { url, filename } = await uploadVideo(file, deviceId);
+      sendDebugInfo('UPLOAD_SUCCESSFUL', { url, filename });
+
+      // Send recording ready event
+      const recordingReady: RecordingReadyEvent = {
+        videoUrl: url,
+        filename,
+        deviceId,
+        timestamp: Date.now(),
+      };
+
+      sendDebugInfo('SENDING_RECORDING_READY_EVENT', { videoUrl: url, filename });
+      sendRecordingReady(recordingReady);
+      setStatus('Video yüklendi!');
+      setIsUploading(false);
+      setShouldUpload(false);
+
+      // Navigate to result page
+      navigate('/result', { state: { videoUrl: url, filename } });
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      sendDebugInfo('UPLOAD_ERROR_IN_HANDLE_VIDEO_UPLOAD', { error: errorMessage, stack: errorStack });
+      setStatus('Yükleme hatası');
+      setIsUploading(false);
+      setShouldUpload(false);
+    }
+  }, [videoUrl, deviceId, sendRecordingReady, navigate]);
+
   // Handle upload when video is ready and shouldUpload is true
   useEffect(() => {
     sendDebugInfo('UPLOAD_EFFECT_TRIGGERED', { shouldUpload, videoUrl: !!videoUrl, isUploading });
@@ -84,14 +136,21 @@ const Recorder: React.FC = () => {
       setIsUploading(true);
       setStatus('Kayıt tamamlandı, yükleniyor...');
       
-      handleVideoUpload().catch(error => {
-        sendDebugInfo('UPLOAD_ERROR', { error: error.message, stack: error.stack });
-        setStatus('Yükleme hatası');
-        setIsUploading(false);
-        setShouldUpload(false);
-      });
+      // Use a separate function to avoid dependency issues
+      const performUpload = async () => {
+        try {
+          await handleVideoUpload();
+        } catch (error) {
+          sendDebugInfo('UPLOAD_ERROR', { error: error instanceof Error ? error.message : 'Unknown error', stack: error instanceof Error ? error.stack : undefined });
+          setStatus('Yükleme hatası');
+          setIsUploading(false);
+          setShouldUpload(false);
+        }
+      };
+      
+      performUpload();
     }
-  }, [shouldUpload, videoUrl, isUploading]);
+  }, [shouldUpload, videoUrl, isUploading, handleVideoUpload]);
 
   useEffect(() => {
     if (isConnected && !isRegistered) {
@@ -165,58 +224,6 @@ const Recorder: React.FC = () => {
 
     return cleanup;
   }, [onStartRecord, startRecording, stopRecording, isRecording]);
-
-  const handleVideoUpload = async () => {
-    sendDebugInfo('HANDLE_VIDEO_UPLOAD_CALLED', { videoUrl: !!videoUrl });
-    if (!videoUrl) {
-      sendDebugInfo('NO_VIDEO_URL_WAITING', { videoUrl: !!videoUrl });
-      // Wait a bit more for video to be ready
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      if (!videoUrl) {
-        sendDebugInfo('NO_VIDEO_URL_AFTER_WAIT', { videoUrl: !!videoUrl });
-        throw new Error('No video to upload - video URL not available');
-      }
-    }
-
-    try {
-      sendDebugInfo('CONVERTING_VIDEO_URL_TO_FILE', { videoUrl: !!videoUrl });
-      // Convert video URL to File
-      const response = await fetch(videoUrl);
-      const blob = await response.blob();
-      const file = new File([blob], 'recording.webm', { type: 'video/webm' });
-      sendDebugInfo('FILE_CREATED', { fileSize: file.size, fileName: file.name });
-
-      sendDebugInfo('UPLOADING_TO_BACKEND_API', { deviceId });
-      // Upload to backend API
-      const { url, filename } = await uploadVideo(file, deviceId);
-      sendDebugInfo('UPLOAD_SUCCESSFUL', { url, filename });
-
-      // Send recording ready event
-      const recordingReady: RecordingReadyEvent = {
-        videoUrl: url,
-        filename,
-        deviceId,
-        timestamp: Date.now(),
-      };
-
-      sendDebugInfo('SENDING_RECORDING_READY_EVENT', { videoUrl: url, filename });
-      sendRecordingReady(recordingReady);
-      setStatus('Video yüklendi!');
-      setIsUploading(false);
-      setShouldUpload(false);
-
-      // Navigate to result page
-      navigate('/result', { state: { videoUrl: url, filename } });
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      sendDebugInfo('UPLOAD_ERROR_IN_HANDLE_VIDEO_UPLOAD', { error: errorMessage, stack: errorStack });
-      setStatus('Yükleme hatası');
-      setIsUploading(false);
-      setShouldUpload(false);
-    }
-  };
 
   const error = socketError || recorderError;
 
