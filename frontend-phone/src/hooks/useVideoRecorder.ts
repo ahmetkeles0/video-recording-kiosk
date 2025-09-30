@@ -35,10 +35,48 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
         const permissions = await navigator.permissions.query({ name: 'camera' as PermissionName });
         const audioPermissions = await navigator.permissions.query({ name: 'microphone' as PermissionName });
         
-        console.log('Camera permission:', permissions.state);
-        console.log('Microphone permission:', audioPermissions.state);
+        // Send permission debug info to backend
+        const sendDebugInfo = async (type: string, data: any) => {
+          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+          try {
+            await fetch(`${BACKEND_URL}/api/debug`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type,
+                deviceId: 'video-recorder',
+                data,
+                timestamp: new Date().toISOString()
+              })
+            });
+          } catch (e) {
+            // Ignore debug logging errors
+          }
+        };
+
+        sendDebugInfo('CAMERA_PERMISSION_STATUS', { state: permissions.state });
+        sendDebugInfo('MICROPHONE_PERMISSION_STATUS', { state: audioPermissions.state });
       } catch (permError) {
-        console.log('Permission query not supported, proceeding with getUserMedia');
+        // Send debug info to backend
+        const sendDebugInfo = async (type: string, data: any) => {
+          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+          try {
+            await fetch(`${BACKEND_URL}/api/debug`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type,
+                deviceId: 'video-recorder',
+                data,
+                timestamp: new Date().toISOString()
+              })
+            });
+          } catch (e) {
+            // Ignore debug logging errors
+          }
+        };
+
+        sendDebugInfo('PERMISSION_QUERY_NOT_SUPPORTED', { error: permError instanceof Error ? permError.message : 'Unknown error' });
       }
       
       // Request camera and microphone access with more specific constraints
@@ -77,14 +115,34 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
       };
 
       mediaRecorder.onstop = () => {
-        console.log('MediaRecorder onstop triggered, chunks:', chunks.length);
+        // Send debug info to backend
+        const sendDebugInfo = async (type: string, data: any) => {
+          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+          try {
+            await fetch(`${BACKEND_URL}/api/debug`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type,
+                deviceId: 'video-recorder',
+                data,
+                timestamp: new Date().toISOString()
+              })
+            });
+          } catch (e) {
+            // Ignore debug logging errors
+          }
+        };
+
+        sendDebugInfo('MEDIA_RECORDER_ONSTOP_TRIGGERED', { chunks: chunks.length });
         const blob = new Blob(chunks, { type: 'video/webm' });
-        console.log('Video blob created, size:', blob.size);
+        sendDebugInfo('VIDEO_BLOB_CREATED', { blobSize: blob.size, chunks: chunks.length });
         setRecordedChunks(chunks);
-        setVideoUrl(URL.createObjectURL(blob));
+        const url = URL.createObjectURL(blob);
+        setVideoUrl(url);
         setIsRecording(false);
         setIsPaused(false);
-        console.log('Recording stopped and video URL set');
+        sendDebugInfo('RECORDING_STOPPED_VIDEO_URL_SET', { url, blobSize: blob.size });
       };
 
       mediaRecorder.onerror = (event) => {
@@ -120,9 +178,28 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
   }, []);
 
   const stopRecording = useCallback(() => {
-    console.log('stopRecording called, isRecording:', isRecording, 'mediaRecorder:', !!mediaRecorderRef.current);
+    // Send debug info to backend
+    const sendDebugInfo = async (type: string, data: any) => {
+      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+      try {
+        await fetch(`${BACKEND_URL}/api/debug`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type,
+            deviceId: 'video-recorder',
+            data,
+            timestamp: new Date().toISOString()
+          })
+        });
+      } catch (e) {
+        // Ignore debug logging errors
+      }
+    };
+
+    sendDebugInfo('STOP_RECORDING_CALLED', { isRecording, hasMediaRecorder: !!mediaRecorderRef.current });
     if (mediaRecorderRef.current && isRecording) {
-      console.log('Stopping MediaRecorder...');
+      sendDebugInfo('STOPPING_MEDIA_RECORDER', { isRecording });
       mediaRecorderRef.current.stop();
     }
 

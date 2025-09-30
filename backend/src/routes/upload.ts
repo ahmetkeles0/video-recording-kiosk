@@ -224,4 +224,18 @@ router.get('/video/:filename', async (req, res) => {
   }
 });
 
+// Debug endpoint for frontend logging
+router.post('/debug', async (req, res) => {
+  const { type, deviceId, data, timestamp } = req.body;
+  
+  logger.info(`🔍 FRONTEND DEBUG: ${type}`, {
+    deviceId,
+    data,
+    timestamp,
+    receivedAt: new Date().toISOString()
+  });
+  
+  res.json({ success: true });
+});
+
 export default router;

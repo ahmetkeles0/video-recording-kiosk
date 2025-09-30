@@ -20,7 +20,21 @@ export const uploadVideo = async (file: File, deviceId: string): Promise<{ url: 
     timestamp: new Date().toISOString()
   };
   
-  console.log('Upload starting:', debugInfo);
+  // Send debug info to backend
+  try {
+    await fetch(`${BACKEND_URL}/api/debug`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'UPLOAD_START',
+        deviceId,
+        data: debugInfo,
+        timestamp: new Date().toISOString()
+      })
+    });
+  } catch (e) {
+    // Ignore debug logging errors
+  }
   
   // Convert file to base64
   const arrayBuffer = await file.arrayBuffer();
@@ -32,7 +46,21 @@ export const uploadVideo = async (file: File, deviceId: string): Promise<{ url: 
     compressionRatio: Math.round((base64String.length / file.size) * 100) / 100
   };
   
-  console.log('Base64 conversion complete:', base64Info);
+  // Send base64 conversion debug info to backend
+  try {
+    await fetch(`${BACKEND_URL}/api/debug`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'BASE64_CONVERSION',
+        deviceId,
+        data: base64Info,
+        timestamp: new Date().toISOString()
+      })
+    });
+  } catch (e) {
+    // Ignore debug logging errors
+  }
   
   const response = await fetch(`${BACKEND_URL}/api/upload`, {
     method: 'POST',
@@ -54,7 +82,22 @@ export const uploadVideo = async (file: File, deviceId: string): Promise<{ url: 
       statusText: response.statusText,
       url: response.url
     };
-    console.error('Upload response not ok:', errorDetails);
+    
+    // Send error debug info to backend
+    try {
+      await fetch(`${BACKEND_URL}/api/debug`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'UPLOAD_ERROR',
+          deviceId,
+          data: errorDetails,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (e) {
+      // Ignore debug logging errors
+    }
     
     let errorData;
     try {
@@ -63,15 +106,60 @@ export const uploadVideo = async (file: File, deviceId: string): Promise<{ url: 
       errorData = { error: 'Could not parse error response' };
     }
     
-    console.error('Upload error data:', errorData);
+    // Send error data to backend
+    try {
+      await fetch(`${BACKEND_URL}/api/debug`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'UPLOAD_ERROR_DATA',
+          deviceId,
+          data: errorData,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (e) {
+      // Ignore debug logging errors
+    }
+    
     throw new Error(`Upload failed: ${errorData.error || 'Unknown error'}`);
   }
 
   const data = await response.json();
-  console.log('Upload response data:', data);
+  
+  // Send success debug info to backend
+  try {
+    await fetch(`${BACKEND_URL}/api/debug`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'UPLOAD_SUCCESS',
+        deviceId,
+        data: data,
+        timestamp: new Date().toISOString()
+      })
+    });
+  } catch (e) {
+    // Ignore debug logging errors
+  }
   
   if (!data.success) {
-    console.error('Upload not successful:', data);
+    // Send failure debug info to backend
+    try {
+      await fetch(`${BACKEND_URL}/api/debug`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'UPLOAD_FAILED',
+          deviceId,
+          data: data,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (e) {
+      // Ignore debug logging errors
+    }
+    
     throw new Error(`Upload failed: ${data.error || 'Unknown error'}`);
   }
 

@@ -15,7 +15,26 @@ export const useSocket = () => {
     });
 
     newSocket.on('connect', () => {
-      console.log('Connected to server');
+      // Send debug info to backend
+      const sendDebugInfo = async (type: string, data: any) => {
+        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+        try {
+          await fetch(`${BACKEND_URL}/api/debug`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type,
+              deviceId: 'socket-client',
+              data,
+              timestamp: new Date().toISOString()
+            })
+          });
+        } catch (e) {
+          // Ignore debug logging errors
+        }
+      };
+
+      sendDebugInfo('SOCKET_CONNECTED', { socketId: newSocket.id });
       setIsConnected(true);
       setError(null);
       // Expose socket to window for debugging
@@ -23,12 +42,50 @@ export const useSocket = () => {
     });
 
     newSocket.on('disconnect', () => {
-      console.log('Disconnected from server');
+      // Send debug info to backend
+      const sendDebugInfo = async (type: string, data: any) => {
+        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+        try {
+          await fetch(`${BACKEND_URL}/api/debug`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type,
+              deviceId: 'socket-client',
+              data,
+              timestamp: new Date().toISOString()
+            })
+          });
+        } catch (e) {
+          // Ignore debug logging errors
+        }
+      };
+
+      sendDebugInfo('SOCKET_DISCONNECTED', { socketId: newSocket.id });
       setIsConnected(false);
     });
 
     newSocket.on('connect_error', (err) => {
-      console.error('Connection error:', err);
+      // Send debug info to backend
+      const sendDebugInfo = async (type: string, data: any) => {
+        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+        try {
+          await fetch(`${BACKEND_URL}/api/debug`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type,
+              deviceId: 'socket-client',
+              data,
+              timestamp: new Date().toISOString()
+            })
+          });
+        } catch (e) {
+          // Ignore debug logging errors
+        }
+      };
+
+      sendDebugInfo('SOCKET_CONNECTION_ERROR', { error: err.message || 'Unknown error' });
       setError('Failed to connect to server');
     });
 

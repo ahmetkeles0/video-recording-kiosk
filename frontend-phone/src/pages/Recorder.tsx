@@ -49,7 +49,7 @@ const Recorder: React.FC = () => {
           setPermissionStatus('prompt');
         }
       } catch (error) {
-        console.log('Permission API not supported');
+        sendDebugInfo('PERMISSION_API_NOT_SUPPORTED', { error: error instanceof Error ? error.message : 'Unknown error' });
         setPermissionStatus('unknown');
       }
     };
@@ -57,15 +57,35 @@ const Recorder: React.FC = () => {
     checkPermissions();
   }, []);
 
+  // Send debug info to backend
+  const sendDebugInfo = async (type: string, data: any) => {
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+    try {
+      await fetch(`${BACKEND_URL}/api/debug`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          deviceId,
+          data,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (e) {
+      // Ignore debug logging errors
+    }
+  };
+
   // Handle upload when video is ready and shouldUpload is true
   useEffect(() => {
+    sendDebugInfo('UPLOAD_EFFECT_TRIGGERED', { shouldUpload, videoUrl: !!videoUrl, isUploading });
     if (shouldUpload && videoUrl && !isUploading) {
-      console.log('Video is ready, starting upload process...');
+      sendDebugInfo('VIDEO_READY_STARTING_UPLOAD', { shouldUpload, videoUrl: !!videoUrl, isUploading });
       setIsUploading(true);
       setStatus('Kayıt tamamlandı, yükleniyor...');
       
       handleVideoUpload().catch(error => {
-        console.error('Upload error:', error);
+        sendDebugInfo('UPLOAD_ERROR', { error: error.message, stack: error.stack });
         setStatus('Yükleme hatası');
         setIsUploading(false);
         setShouldUpload(false);
@@ -95,7 +115,7 @@ const Recorder: React.FC = () => {
 
   useEffect(() => {
     const cleanup = onStartRecord(async (data: StartRecordEvent) => {
-      console.log('Start record received:', data);
+      sendDebugInfo('START_RECORD_RECEIVED', { data });
       setStatus('Kayıt başlatılıyor...');
       
       try {
@@ -116,10 +136,20 @@ const Recorder: React.FC = () => {
 
         // Auto-stop after 15 seconds
         const timeoutId = setTimeout(() => {
-          console.log('15-second timeout reached, stopping recording...');
+          sendDebugInfo('15_SECOND_TIMEOUT_REACHED', { isRecording, videoUrl: !!videoUrl });
           stopRecording();
           setStatus('Kayıt tamamlandı, yükleniyor...');
           setShouldUpload(true); // Trigger upload when video is ready
+          sendDebugInfo('SHOULD_UPLOAD_SET_TO_TRUE', { shouldUpload: true });
+          
+          // Backup timer - try upload even if video URL not ready
+          setTimeout(() => {
+            sendDebugInfo('BACKUP_UPLOAD_TIMER_TRIGGERED', { shouldUpload, isUploading });
+            if (shouldUpload && !isUploading) {
+              sendDebugInfo('ATTEMPTING_BACKUP_UPLOAD', { shouldUpload, isUploading });
+              setShouldUpload(true);
+            }
+          }, 3000);
         }, 15000);
 
         // Store timeout ID for cleanup
@@ -137,28 +167,29 @@ const Recorder: React.FC = () => {
   }, [onStartRecord, startRecording, stopRecording, isRecording]);
 
   const handleVideoUpload = async () => {
-    console.log('handleVideoUpload called, videoUrl:', videoUrl);
+    sendDebugInfo('HANDLE_VIDEO_UPLOAD_CALLED', { videoUrl: !!videoUrl });
     if (!videoUrl) {
-      console.log('No video URL available, waiting for video to be ready...');
+      sendDebugInfo('NO_VIDEO_URL_WAITING', { videoUrl: !!videoUrl });
       // Wait a bit more for video to be ready
       await new Promise(resolve => setTimeout(resolve, 1000));
       if (!videoUrl) {
+        sendDebugInfo('NO_VIDEO_URL_AFTER_WAIT', { videoUrl: !!videoUrl });
         throw new Error('No video to upload - video URL not available');
       }
     }
 
     try {
-      console.log('Converting video URL to File...');
+      sendDebugInfo('CONVERTING_VIDEO_URL_TO_FILE', { videoUrl: !!videoUrl });
       // Convert video URL to File
       const response = await fetch(videoUrl);
       const blob = await response.blob();
       const file = new File([blob], 'recording.webm', { type: 'video/webm' });
-      console.log('File created, size:', file.size);
+      sendDebugInfo('FILE_CREATED', { fileSize: file.size, fileName: file.name });
 
-      console.log('Uploading to backend API...');
+      sendDebugInfo('UPLOADING_TO_BACKEND_API', { deviceId });
       // Upload to backend API
       const { url, filename } = await uploadVideo(file, deviceId);
-      console.log('Upload successful, URL:', url, 'filename:', filename);
+      sendDebugInfo('UPLOAD_SUCCESSFUL', { url, filename });
 
       // Send recording ready event
       const recordingReady: RecordingReadyEvent = {
@@ -168,7 +199,7 @@ const Recorder: React.FC = () => {
         timestamp: Date.now(),
       };
 
-      console.log('Sending recording-ready event...');
+      sendDebugInfo('SENDING_RECORDING_READY_EVENT', { videoUrl: url, filename });
       sendRecordingReady(recordingReady);
       setStatus('Video yüklendi!');
       setIsUploading(false);
@@ -178,7 +209,9 @@ const Recorder: React.FC = () => {
       navigate('/result', { state: { videoUrl: url, filename } });
 
     } catch (error) {
-      console.error('Upload error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      sendDebugInfo('UPLOAD_ERROR_IN_HANDLE_VIDEO_UPLOAD', { error: errorMessage, stack: errorStack });
       setStatus('Yükleme hatası');
       setIsUploading(false);
       setShouldUpload(false);
@@ -268,6 +301,22 @@ const Recorder: React.FC = () => {
         <div className="status uploading">
           <div className="loading"></div>
           <p>Video yükleniyor...</p>
+        </div>
+      )}
+
+      {shouldUpload && !videoUrl && !isUploading && (
+        <div className="permission-warning">
+          <p>⚠️ Video işleniyor, lütfen bekleyin...</p>
+          <button 
+            className="button" 
+            onClick={() => {
+              sendDebugInfo('MANUAL_UPLOAD_TRIGGER_CLICKED', { shouldUpload, videoUrl: !!videoUrl, isUploading });
+              setShouldUpload(true);
+            }}
+            style={{ marginTop: '1rem' }}
+          >
+            Manuel Yükleme
+          </button>
         </div>
       )}
     </div>

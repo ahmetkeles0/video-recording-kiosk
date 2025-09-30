@@ -24,12 +24,50 @@ export const useCanvasCompositing = (): UseCanvasCompositingReturn => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => {
-        console.log('Logo loaded successfully');
+        // Send debug info to backend
+        const sendDebugInfo = async (type: string, data: any) => {
+          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+          try {
+            await fetch(`${BACKEND_URL}/api/debug`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type,
+                deviceId: 'canvas-compositing',
+                data,
+                timestamp: new Date().toISOString()
+              })
+            });
+          } catch (e) {
+            // Ignore debug logging errors
+          }
+        };
+
+        sendDebugInfo('LOGO_LOADED_SUCCESSFULLY', { logoWidth: img.width, logoHeight: img.height });
         logoImageRef.current = img;
         resolve(img);
       };
       img.onerror = (error) => {
-        console.error('Logo load error:', error);
+        // Send debug info to backend
+        const sendDebugInfo = async (type: string, data: any) => {
+          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+          try {
+            await fetch(`${BACKEND_URL}/api/debug`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type,
+                deviceId: 'canvas-compositing',
+                data,
+                timestamp: new Date().toISOString()
+              })
+            });
+          } catch (e) {
+            // Ignore debug logging errors
+          }
+        };
+
+        sendDebugInfo('LOGO_LOAD_ERROR', { error: error instanceof Error ? error.message : 'Unknown error' });
         reject(error);
       };
       img.src = '/overlay-logo.png';
@@ -120,7 +158,26 @@ export const useCanvasCompositing = (): UseCanvasCompositingReturn => {
     // Pre-load logo with better error handling
     try {
       await loadLogo();
-      console.log('Logo pre-loaded successfully');
+      // Send debug info to backend
+      const sendDebugInfo = async (type: string, data: any) => {
+        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+        try {
+          await fetch(`${BACKEND_URL}/api/debug`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type,
+              deviceId: 'canvas-compositing',
+              data,
+              timestamp: new Date().toISOString()
+            })
+          });
+        } catch (e) {
+          // Ignore debug logging errors
+        }
+      };
+
+      sendDebugInfo('LOGO_PRE_LOADED_SUCCESSFULLY', {});
     } catch (error) {
       console.error('Error pre-loading logo:', error);
       // Continue without logo if loading fails
