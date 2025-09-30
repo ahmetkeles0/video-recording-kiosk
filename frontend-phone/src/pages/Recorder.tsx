@@ -32,6 +32,7 @@ const Recorder: React.FC = () => {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown');
+  const [shouldUpload, setShouldUpload] = useState(false);
 
   // Check camera/microphone permissions on mount
   useEffect(() => {
@@ -55,6 +56,22 @@ const Recorder: React.FC = () => {
     
     checkPermissions();
   }, []);
+
+  // Handle upload when video is ready and shouldUpload is true
+  useEffect(() => {
+    if (shouldUpload && videoUrl && !isUploading) {
+      console.log('Video is ready, starting upload process...');
+      setIsUploading(true);
+      setStatus('Kayıt tamamlandı, yükleniyor...');
+      
+      handleVideoUpload().catch(error => {
+        console.error('Upload error:', error);
+        setStatus('Yükleme hatası');
+        setIsUploading(false);
+        setShouldUpload(false);
+      });
+    }
+  }, [shouldUpload, videoUrl, isUploading]);
 
   useEffect(() => {
     if (isConnected && !isRegistered) {
@@ -98,23 +115,17 @@ const Recorder: React.FC = () => {
         }, 1000);
 
         // Auto-stop after 15 seconds
-        setTimeout(async () => {
+        const timeoutId = setTimeout(() => {
           console.log('15-second timeout reached, stopping recording...');
           stopRecording();
           setStatus('Kayıt tamamlandı, yükleniyor...');
-          setIsUploading(true);
-          
-          // Wait for video to be ready
-          setTimeout(async () => {
-            try {
-              await handleVideoUpload();
-            } catch (error) {
-              console.error('Upload error:', error);
-              setStatus('Yükleme hatası');
-              setIsUploading(false);
-            }
-          }, 1000);
+          setShouldUpload(true); // Trigger upload when video is ready
         }, 15000);
+
+        // Store timeout ID for cleanup
+        return () => {
+          clearTimeout(timeoutId);
+        };
 
       } catch (error) {
         console.error('Recording error:', error);
@@ -128,7 +139,12 @@ const Recorder: React.FC = () => {
   const handleVideoUpload = async () => {
     console.log('handleVideoUpload called, videoUrl:', videoUrl);
     if (!videoUrl) {
-      throw new Error('No video to upload');
+      console.log('No video URL available, waiting for video to be ready...');
+      // Wait a bit more for video to be ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (!videoUrl) {
+        throw new Error('No video to upload - video URL not available');
+      }
     }
 
     try {
@@ -156,6 +172,7 @@ const Recorder: React.FC = () => {
       sendRecordingReady(recordingReady);
       setStatus('Video yüklendi!');
       setIsUploading(false);
+      setShouldUpload(false);
 
       // Navigate to result page
       navigate('/result', { state: { videoUrl: url, filename } });
@@ -164,6 +181,7 @@ const Recorder: React.FC = () => {
       console.error('Upload error:', error);
       setStatus('Yükleme hatası');
       setIsUploading(false);
+      setShouldUpload(false);
     }
   };
 
