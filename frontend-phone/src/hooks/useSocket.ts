@@ -18,6 +18,8 @@ export const useSocket = () => {
       console.log('Connected to server');
       setIsConnected(true);
       setError(null);
+      // Expose socket to window for debugging
+      (window as any).socket = newSocket;
     });
 
     newSocket.on('disconnect', () => {
