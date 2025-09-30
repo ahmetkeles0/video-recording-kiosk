@@ -3,13 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../hooks/useSocket';
 import { useVideoRecorder } from '../hooks/useVideoRecorder';
 import { uploadVideo } from '../hooks/useSupabase';
-import { StartRecordEvent, RecordingReadyEvent } from '../types';
+import { RecordingReadyEvent } from '../types';
 
 const Recorder: React.FC = () => {
   const navigate = useNavigate();
   const { 
     isConnected, 
-    error: socketError, 
     registerDevice, 
     onStartRecord, 
     sendRecordingReady,
@@ -22,7 +21,6 @@ const Recorder: React.FC = () => {
     startRecording,
     stopRecording,
     clearRecording,
-    error: recorderError,
     canvasRef,
   } = useVideoRecorder();
 
@@ -31,7 +29,7 @@ const Recorder: React.FC = () => {
   const [status, setStatus] = useState('Bağlanıyor...');
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [permissionStatus, setPermissionStatus] = useState<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown');
+  const [, setPermissionStatus] = useState<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown');
 
   // Debug logger
   const sendDebugInfo = useCallback(async (type: string, data: any) => {
@@ -124,7 +122,7 @@ const Recorder: React.FC = () => {
   useEffect(() => {
     if (!isRegistered) return;
 
-    onStartRecord(async (event: StartRecordEvent) => {
+    onStartRecord(async () => {
       setStatus('Kayda hazırlanıyor...');
       setCountdown(3);
 
