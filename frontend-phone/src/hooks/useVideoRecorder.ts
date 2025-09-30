@@ -61,11 +61,14 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
       };
 
       mediaRecorder.onstop = () => {
+        console.log('MediaRecorder onstop triggered, chunks:', chunks.length);
         const blob = new Blob(chunks, { type: 'video/webm' });
+        console.log('Video blob created, size:', blob.size);
         setRecordedChunks(chunks);
         setVideoUrl(URL.createObjectURL(blob));
         setIsRecording(false);
         setIsPaused(false);
+        console.log('Recording stopped and video URL set');
       };
 
       mediaRecorder.onerror = (event) => {
@@ -88,7 +91,9 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
   }, []);
 
   const stopRecording = useCallback(() => {
+    console.log('stopRecording called, isRecording:', isRecording, 'mediaRecorder:', !!mediaRecorderRef.current);
     if (mediaRecorderRef.current && isRecording) {
+      console.log('Stopping MediaRecorder...');
       mediaRecorderRef.current.stop();
     }
 

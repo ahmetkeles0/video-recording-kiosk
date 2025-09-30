@@ -75,22 +75,21 @@ const Recorder: React.FC = () => {
 
         // Auto-stop after 15 seconds
         setTimeout(async () => {
-          if (isRecording) {
-            stopRecording();
-            setStatus('Kayıt tamamlandı, yükleniyor...');
-            setIsUploading(true);
-            
-            // Wait for video to be ready
-            setTimeout(async () => {
-              try {
-                await handleVideoUpload();
-              } catch (error) {
-                console.error('Upload error:', error);
-                setStatus('Yükleme hatası');
-                setIsUploading(false);
-              }
-            }, 1000);
-          }
+          console.log('15-second timeout reached, stopping recording...');
+          stopRecording();
+          setStatus('Kayıt tamamlandı, yükleniyor...');
+          setIsUploading(true);
+          
+          // Wait for video to be ready
+          setTimeout(async () => {
+            try {
+              await handleVideoUpload();
+            } catch (error) {
+              console.error('Upload error:', error);
+              setStatus('Yükleme hatası');
+              setIsUploading(false);
+            }
+          }, 1000);
         }, 15000);
 
       } catch (error) {
@@ -103,18 +102,23 @@ const Recorder: React.FC = () => {
   }, [onStartRecord, startRecording, stopRecording, isRecording]);
 
   const handleVideoUpload = async () => {
+    console.log('handleVideoUpload called, videoUrl:', videoUrl);
     if (!videoUrl) {
       throw new Error('No video to upload');
     }
 
     try {
+      console.log('Converting video URL to File...');
       // Convert video URL to File
       const response = await fetch(videoUrl);
       const blob = await response.blob();
       const file = new File([blob], 'recording.webm', { type: 'video/webm' });
+      console.log('File created, size:', file.size);
 
-      // Upload to Supabase
-      const { url, filename } = await uploadVideo(file);
+      console.log('Uploading to backend API...');
+      // Upload to backend API
+      const { url, filename } = await uploadVideo(file, deviceId);
+      console.log('Upload successful, URL:', url, 'filename:', filename);
 
       // Send recording ready event
       const recordingReady: RecordingReadyEvent = {
@@ -124,6 +128,7 @@ const Recorder: React.FC = () => {
         timestamp: Date.now(),
       };
 
+      console.log('Sending recording-ready event...');
       sendRecordingReady(recordingReady);
       setStatus('Video yüklendi!');
       setIsUploading(false);
