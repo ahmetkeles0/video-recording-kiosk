@@ -30,7 +30,7 @@ router.post('/upload', async (req, res) => {
   const startTime = Date.now();
   const requestId = uuidv4();
   
-  logger.info('Upload request received', {
+  logger.info('📥 UPLOAD REQUEST RECEIVED', {
     requestId,
     deviceId: req.body?.deviceId,
     filename: req.body?.filename,
@@ -40,20 +40,22 @@ router.post('/upload', async (req, res) => {
     userAgent: req.get('User-Agent'),
     ip: req.ip,
     debugInfo: req.body?.debugInfo,
-    base64Info: req.body?.base64Info
+    base64Info: req.body?.base64Info,
+    timestamp: new Date().toISOString()
   });
 
   try {
     const { videoBlob, filename, deviceId } = req.body;
 
     if (!videoBlob || !filename || !deviceId) {
-      logger.warn('Missing required fields', {
+      logger.warn('❌ MISSING REQUIRED FIELDS', {
         requestId,
         hasVideoBlob: !!videoBlob,
         hasFilename: !!filename,
         hasDeviceId: !!deviceId,
         videoBlobSize: videoBlob?.length || 0,
-        requestBody: req.body
+        requestBody: req.body,
+        timestamp: new Date().toISOString()
       });
       return res.status(400).json({
         success: false,
@@ -65,31 +67,34 @@ router.post('/upload', async (req, res) => {
     const uniqueFilename = `${uuidv4()}_${filename}`;
     const filePath = `videos/${uniqueFilename}`;
 
-    logger.info('Processing video upload', {
+    logger.info('🔄 PROCESSING VIDEO UPLOAD', {
       requestId,
       deviceId,
       originalFilename: filename,
       uniqueFilename,
       filePath,
       videoBlobSize: videoBlob.length,
-      estimatedSizeMB: Math.round(videoBlob.length / 1024 / 1024 * 100) / 100
+      estimatedSizeMB: Math.round(videoBlob.length / 1024 / 1024 * 100) / 100,
+      timestamp: new Date().toISOString()
     });
 
     // Convert base64 to buffer
     const buffer = Buffer.from(videoBlob, 'base64');
     
-    logger.debug('Buffer conversion completed', {
+    logger.info('📦 BUFFER CONVERSION COMPLETED', {
       requestId,
       bufferSize: buffer.length,
-      bufferSizeMB: Math.round(buffer.length / 1024 / 1024 * 100) / 100
+      bufferSizeMB: Math.round(buffer.length / 1024 / 1024 * 100) / 100,
+      timestamp: new Date().toISOString()
     });
 
     // Upload to Supabase Storage
-    logger.info('Starting Supabase upload', {
+    logger.info('☁️ STARTING SUPABASE UPLOAD', {
       requestId,
       filePath,
       bufferSize: buffer.length,
-      contentType: 'video/webm'
+      contentType: 'video/webm',
+      timestamp: new Date().toISOString()
     });
 
     const uploadStartTime = Date.now();
@@ -103,12 +108,13 @@ router.post('/upload', async (req, res) => {
     const uploadDuration = Date.now() - uploadStartTime;
 
     if (error) {
-      logger.error('Supabase upload failed', {
+      logger.error('❌ SUPABASE UPLOAD FAILED', {
         requestId,
         error: error.message,
         uploadDuration,
         filePath,
-        bufferSize: buffer.length
+        bufferSize: buffer.length,
+        timestamp: new Date().toISOString()
       });
       return res.status(500).json({
         success: false,
@@ -116,11 +122,12 @@ router.post('/upload', async (req, res) => {
       } as UploadResponse);
     }
 
-    logger.info('Supabase upload successful', {
+    logger.info('✅ SUPABASE UPLOAD SUCCESSFUL', {
       requestId,
       uploadDuration,
       supabaseData: data,
-      filePath
+      filePath,
+      timestamp: new Date().toISOString()
     });
 
     // Get public URL
@@ -132,14 +139,15 @@ router.post('/upload', async (req, res) => {
 
     const totalDuration = Date.now() - startTime;
 
-    logger.info('Video upload completed successfully', {
+    logger.info('🎉 VIDEO UPLOAD COMPLETED SUCCESSFULLY', {
       requestId,
       videoUrl,
       filename: uniqueFilename,
       totalDuration,
       uploadDuration,
       fileSize: buffer.length,
-      fileSizeMB: Math.round(buffer.length / 1024 / 1024 * 100) / 100
+      fileSizeMB: Math.round(buffer.length / 1024 / 1024 * 100) / 100,
+      timestamp: new Date().toISOString()
     });
 
     res.json({
@@ -149,13 +157,14 @@ router.post('/upload', async (req, res) => {
     } as UploadResponse);
   } catch (error) {
     const totalDuration = Date.now() - startTime;
-    logger.error('Upload process failed', {
+    logger.error('💥 UPLOAD PROCESS FAILED', {
       requestId,
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
       totalDuration,
       deviceId: req.body?.deviceId,
-      filename: req.body?.filename
+      filename: req.body?.filename,
+      timestamp: new Date().toISOString()
     });
     res.status(500).json({
       success: false,

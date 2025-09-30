@@ -90,7 +90,7 @@ io.on('connection', (socket) => {
 
   // Start recording (tablet -> phone)
   socket.on('start-record', (data: StartRecordEvent) => {
-    logger.info('Start record request received', { 
+    logger.info('🎬 START RECORD REQUEST RECEIVED', { 
       requestDeviceId: data.deviceId,
       timestamp: data.timestamp,
       requestSocketId: socket.id,
@@ -98,7 +98,8 @@ io.on('connection', (socket) => {
         deviceId: id,
         deviceType: device.deviceType,
         socketId: device.socketId
-      }))
+      })),
+      receivedAt: new Date().toISOString()
     });
     
     // Find phone device
@@ -111,23 +112,26 @@ io.on('connection', (socket) => {
       
       if (phoneSocket) {
         phoneSocket.emit('start-record', data);
-        logger.info('Start record command sent to phone', { 
+        logger.info('📱 START RECORD COMMAND SENT TO PHONE', { 
           targetDeviceId: deviceId,
           targetSocketId: deviceInfo.socketId,
-          commandData: data
+          commandData: data,
+          sentAt: new Date().toISOString()
         });
       } else {
-        logger.error('Phone socket not found', { 
+        logger.error('❌ PHONE SOCKET NOT FOUND', { 
           deviceId, 
           socketId: deviceInfo.socketId,
-          availableSockets: Array.from(io.sockets.sockets.keys())
+          availableSockets: Array.from(io.sockets.sockets.keys()),
+          timestamp: new Date().toISOString()
         });
         socket.emit('error', { message: 'Phone device socket not found' });
       }
     } else {
-      logger.warn('No phone device connected', { 
+      logger.warn('⚠️ NO PHONE DEVICE CONNECTED', { 
         availableDevices: Array.from(connectedDevices.entries()),
-        totalDevices: connectedDevices.size
+        totalDevices: connectedDevices.size,
+        timestamp: new Date().toISOString()
       });
       socket.emit('error', { message: 'No phone device connected' });
     }
@@ -168,11 +172,12 @@ io.on('connection', (socket) => {
 
   // Recording ready (phone -> tablet)
   socket.on('recording-ready', (data: RecordingReadyEvent) => {
-    logger.info('Recording ready notification received', { 
+    logger.info('📱 RECORDING READY NOTIFICATION RECEIVED', { 
       videoUrl: data.videoUrl,
       deviceId: data.deviceId,
       timestamp: data.timestamp,
-      phoneSocketId: socket.id
+      phoneSocketId: socket.id,
+      receivedAt: new Date().toISOString()
     });
     
     // Find tablet device
@@ -185,22 +190,25 @@ io.on('connection', (socket) => {
       
       if (tabletSocket) {
         tabletSocket.emit('video-uploaded', data);
-        logger.info('Video URL sent to tablet', { 
+        logger.info('📤 VIDEO URL SENT TO TABLET', { 
           targetDeviceId: deviceId,
           targetSocketId: deviceInfo.socketId,
-          videoUrl: data.videoUrl
+          videoUrl: data.videoUrl,
+          sentAt: new Date().toISOString()
         });
       } else {
-        logger.error('Tablet socket not found', { 
+        logger.error('❌ TABLET SOCKET NOT FOUND', { 
           deviceId, 
           socketId: deviceInfo.socketId,
-          availableSockets: Array.from(io.sockets.sockets.keys())
+          availableSockets: Array.from(io.sockets.sockets.keys()),
+          timestamp: new Date().toISOString()
         });
       }
     } else {
-      logger.warn('No tablet device connected for video upload', { 
+      logger.warn('⚠️ NO TABLET DEVICE CONNECTED FOR VIDEO UPLOAD', { 
         availableDevices: Array.from(connectedDevices.entries()),
-        videoUrl: data.videoUrl
+        videoUrl: data.videoUrl,
+        timestamp: new Date().toISOString()
       });
     }
   });
