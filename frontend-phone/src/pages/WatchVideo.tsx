@@ -45,16 +45,6 @@ const WatchVideo: React.FC = () => {
     }
   };
 
-  const handleDownload = () => {
-    if (!videoUrl) return;
-    
-    const link = document.createElement('a');
-    link.href = videoUrl;
-    link.download = `video-kiosk-${Date.now()}.webm`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   if (error) {
     return (

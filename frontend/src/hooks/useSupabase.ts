@@ -20,7 +20,7 @@ export const uploadVideo = async (file: File): Promise<{ url: string; filename: 
   const filename = `video_${timestamp}.webm`;
   const filePath = `videos/${filename}`;
 
-  const { data, error } = await supabase.storage
+  const { error } = await supabase.storage
     .from('video-kiosk')
     .upload(filePath, file, {
       contentType: 'video/webm',

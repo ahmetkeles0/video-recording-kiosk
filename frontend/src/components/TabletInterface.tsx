@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../hooks/useSocket';
 import { RecordingReadyEvent } from '../types';
 import QRCode from 'qrcode.react';
 
 const TabletInterface: React.FC = () => {
-  const navigate = useNavigate();
   const { 
     isConnected, 
     error, 
@@ -83,13 +81,6 @@ const TabletInterface: React.FC = () => {
     handleStartRecording();
   };
 
-  const handleShowQR = () => {
-    if (videoUrl) {
-      const watchUrl = `${window.location.origin}/watch?url=${encodeURIComponent(videoUrl)}`;
-      // Show QR code in a modal or navigate to QR page
-      setStatus('QR kod gösteriliyor...');
-    }
-  };
 
   if (error) {
     return (

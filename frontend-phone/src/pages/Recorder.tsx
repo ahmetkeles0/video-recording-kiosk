@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../hooks/useSocket';
 import { useVideoRecorder } from '../hooks/useVideoRecorder';
-import { supabase, uploadVideo } from '../hooks/useSupabase';
+import { uploadVideo } from '../hooks/useSupabase';
 import { StartRecordEvent, RecordingReadyEvent } from '../types';
 
 const Recorder: React.FC = () => {
@@ -18,7 +18,6 @@ const Recorder: React.FC = () => {
   
   const {
     isRecording,
-    isPaused,
     videoUrl,
     startRecording,
     stopRecording,
