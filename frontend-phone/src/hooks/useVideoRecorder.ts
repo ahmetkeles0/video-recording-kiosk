@@ -24,7 +24,7 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const { canvasRef, startCompositing, stopCompositing } = useCanvasCompositing();
+  const { canvasRef, stopCompositing } = useCanvasCompositing();
 
   const startRecording = useCallback(async () => {
     try {
