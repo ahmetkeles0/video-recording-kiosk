@@ -34,6 +34,25 @@ const Recorder: React.FC = () => {
   const [permissionStatus, setPermissionStatus] = useState<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown');
   const [shouldUpload, setShouldUpload] = useState(false);
 
+  // Send debug info to backend - use useCallback to prevent recreation
+  const sendDebugInfo = useCallback(async (type: string, data: any) => {
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+    try {
+      await fetch(`${BACKEND_URL}/api/debug`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          deviceId,
+          data,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (e) {
+      // Ignore debug logging errors
+    }
+  }, [deviceId]);
+
   // Check camera/microphone permissions on mount
   useEffect(() => {
     const checkPermissions = async () => {
@@ -57,26 +76,8 @@ const Recorder: React.FC = () => {
     checkPermissions();
   }, []);
 
-  // Send debug info to backend
-  const sendDebugInfo = async (type: string, data: any) => {
-    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
-    try {
-      await fetch(`${BACKEND_URL}/api/debug`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type,
-          deviceId,
-          data,
-          timestamp: new Date().toISOString()
-        })
-      });
-    } catch (e) {
-      // Ignore debug logging errors
-    }
-  };
-
-  const handleVideoUpload = useCallback(async () => {
+  // Simple upload function with useCallback to prevent recreation
+  const performUpload = useCallback(async () => {
     sendDebugInfo('HANDLE_VIDEO_UPLOAD_CALLED', { videoUrl: !!videoUrl });
     if (!videoUrl) {
       sendDebugInfo('NO_VIDEO_URL_WAITING', { videoUrl: !!videoUrl });
@@ -126,31 +127,22 @@ const Recorder: React.FC = () => {
       setIsUploading(false);
       setShouldUpload(false);
     }
-  }, [videoUrl, deviceId, sendRecordingReady, navigate]);
+  }, [videoUrl, deviceId, sendRecordingReady, navigate, sendDebugInfo]);
 
   // Handle upload when video is ready and shouldUpload is true
   useEffect(() => {
-    sendDebugInfo('UPLOAD_EFFECT_TRIGGERED', { shouldUpload, videoUrl: !!videoUrl, isUploading });
     if (shouldUpload && videoUrl && !isUploading) {
-      sendDebugInfo('VIDEO_READY_STARTING_UPLOAD', { shouldUpload, videoUrl: !!videoUrl, isUploading });
       setIsUploading(true);
       setStatus('Kayıt tamamlandı, yükleniyor...');
       
-      // Use a separate function to avoid dependency issues
-      const performUpload = async () => {
-        try {
-          await handleVideoUpload();
-        } catch (error) {
-          sendDebugInfo('UPLOAD_ERROR', { error: error instanceof Error ? error.message : 'Unknown error', stack: error instanceof Error ? error.stack : undefined });
-          setStatus('Yükleme hatası');
-          setIsUploading(false);
-          setShouldUpload(false);
-        }
-      };
-      
-      performUpload();
+      // Call the upload function directly
+      performUpload().catch(() => {
+        setStatus('Yükleme hatası');
+        setIsUploading(false);
+        setShouldUpload(false);
+      });
     }
-  }, [shouldUpload, videoUrl, isUploading, handleVideoUpload]);
+  }, [shouldUpload, videoUrl, isUploading]);
 
   useEffect(() => {
     if (isConnected && !isRegistered) {
@@ -206,7 +198,12 @@ const Recorder: React.FC = () => {
             sendDebugInfo('BACKUP_UPLOAD_TIMER_TRIGGERED', { shouldUpload, isUploading });
             if (shouldUpload && !isUploading) {
               sendDebugInfo('ATTEMPTING_BACKUP_UPLOAD', { shouldUpload, isUploading });
-              setShouldUpload(true);
+              // Call performUpload directly instead of setting state
+              performUpload().catch(() => {
+                setStatus('Yükleme hatası');
+                setIsUploading(false);
+                setShouldUpload(false);
+              });
             }
           }, 3000);
         }, 15000);
