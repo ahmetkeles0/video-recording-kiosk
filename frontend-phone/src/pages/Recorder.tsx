@@ -24,6 +24,7 @@ const Recorder: React.FC = () => {
     stopRecording,
     clearRecording,
     error: recorderError,
+    canvasRef,
   } = useVideoRecorder();
 
   const [deviceId] = useState(() => `phone_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
@@ -176,19 +177,17 @@ const Recorder: React.FC = () => {
         <div className="loading"></div>
       )}
 
-      {isRecording && (
-        <div className="video-container">
-          <video 
-            autoPlay 
-            muted 
-            playsInline
-            style={{ width: '100%', height: 'auto' }}
-          />
+      <div className="video-container" style={{ display: isRecording ? 'block' : 'none' }}>
+        <canvas 
+          ref={canvasRef}
+          style={{ width: '100%', height: 'auto' }}
+        />
+        {isRecording && (
           <div className="recording-indicator">
             ● KAYIT
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {videoUrl && !isRecording && (
         <div>

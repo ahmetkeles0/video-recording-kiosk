@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
+import { useCanvasCompositing } from './useCanvasCompositing';
 
 interface UseVideoRecorderReturn {
   isRecording: boolean;
@@ -11,6 +12,8 @@ interface UseVideoRecorderReturn {
   resumeRecording: () => void;
   clearRecording: () => void;
   error: string | null;
+  streamRef: React.MutableRefObject<MediaStream | null>;
+  canvasRef: React.RefObject<HTMLCanvasElement>;
 }
 
 export const useVideoRecorder = (): UseVideoRecorderReturn => {
@@ -22,6 +25,7 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const { canvasRef, startCompositing, stopCompositing } = useCanvasCompositing();
 
   const startRecording = useCallback(async () => {
     try {
@@ -48,6 +52,9 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
 
       streamRef.current = stream;
 
+      // Start canvas compositing with logo
+      const compositeStream = await startCompositing(stream);
+
       // Check supported MIME types - MP4 first for better compatibility
       const supportedTypes = [
         'video/mp4;codecs=h264',
@@ -67,8 +74,8 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
       
       console.log('Using MIME type:', mimeType);
 
-      // Create MediaRecorder
-      const mediaRecorder = new MediaRecorder(stream, {
+      // Create MediaRecorder with composite stream (includes logo)
+      const mediaRecorder = new MediaRecorder(compositeStream, {
         mimeType: mimeType,
       });
 
@@ -160,11 +167,14 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
       mediaRecorderRef.current.stop();
     }
 
+    // Stop canvas compositing
+    stopCompositing();
+
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
-  }, [isRecording]);
+  }, [isRecording, stopCompositing]);
 
   const pauseRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording && !isPaused) {
@@ -200,5 +210,6 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
     clearRecording,
     error,
     streamRef,
+    canvasRef,
   };
 };

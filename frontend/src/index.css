@@ -310,6 +310,31 @@ body {
   transform: translateY(0);
 }
 
+/* Logo Overlay Styles */
+.video-container {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.logo-overlay {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.overlay-logo {
+  max-width: 120px;
+  max-height: 60px;
+  width: auto;
+  height: auto;
+  opacity: 0.9;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
 /* Watch URL styles */
 .watch-url-container {
   background: #f7fafc;

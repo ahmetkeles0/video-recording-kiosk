@@ -21,7 +21,8 @@ const PhoneInterface: React.FC = () => {
     stopRecording,
     clearRecording,
     error: recorderError,
-    streamRef
+    streamRef,
+    canvasRef
   } = useVideoRecorder();
 
   const [deviceId] = useState(() => `phone_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
@@ -251,26 +252,17 @@ const PhoneInterface: React.FC = () => {
         <div className="loading"></div>
       )}
 
-      {isRecording && (
-        <div className="video-container">
-          <video 
-            ref={(video) => {
-              if (video && streamRef.current) {
-                console.log('Setting video srcObject:', streamRef.current);
-                video.srcObject = streamRef.current;
-                video.play().catch(err => console.error('Video play error:', err));
-              }
-            }}
-            autoPlay 
-            muted 
-            playsInline 
-            style={{ width: '100%', height: 'auto', backgroundColor: '#000' }}
-          />
+      <div className="video-container" style={{ display: isRecording ? 'block' : 'none' }}>
+        <canvas 
+          ref={canvasRef}
+          style={{ width: '100%', height: 'auto', backgroundColor: '#000' }}
+        />
+        {isRecording && (
           <div className="recording-indicator">
             ● KAYIT
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {videoUrl && !isRecording && (
         <div className="video-preview-container">
