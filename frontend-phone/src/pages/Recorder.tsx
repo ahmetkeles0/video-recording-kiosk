@@ -4,6 +4,8 @@ import { useSocket } from '../hooks/useSocket';
 import { useVideoRecorder } from '../hooks/useVideoRecorder';
 import { uploadVideo } from '../hooks/useSupabase';
 import { StartRecordEvent, RecordingReadyEvent } from '../types';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import { sendDebugInfo } from '../utils/debugLogger';
 
 const Recorder: React.FC = () => {
   const navigate = useNavigate();
@@ -34,23 +36,9 @@ const Recorder: React.FC = () => {
   const [permissionStatus, setPermissionStatus] = useState<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown');
   const [shouldUpload, setShouldUpload] = useState(false);
 
-  // Send debug info to backend - use useCallback to prevent recreation
-  const sendDebugInfo = useCallback(async (type: string, data: any) => {
-    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
-    try {
-      await fetch(`${BACKEND_URL}/api/debug`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type,
-          deviceId,
-          data,
-          timestamp: new Date().toISOString()
-        })
-      });
-    } catch (e) {
-      // Ignore debug logging errors
-    }
+  // Send debug info to backend using optimized logger
+  const logDebugInfo = useCallback(async (type: string, data: any) => {
+    await sendDebugInfo(type, deviceId, data);
   }, [deviceId]);
 
   // Check camera/microphone permissions on mount
@@ -68,7 +56,7 @@ const Recorder: React.FC = () => {
           setPermissionStatus('prompt');
         }
       } catch (error) {
-        sendDebugInfo('PERMISSION_API_NOT_SUPPORTED', { error: error instanceof Error ? error.message : 'Unknown error' });
+        logDebugInfo('PERMISSION_API_NOT_SUPPORTED', { error: error instanceof Error ? error.message : 'Unknown error' });
         setPermissionStatus('unknown');
       }
     };
@@ -78,29 +66,29 @@ const Recorder: React.FC = () => {
 
   // Simple upload function with useCallback to prevent recreation
   const performUpload = useCallback(async () => {
-    sendDebugInfo('HANDLE_VIDEO_UPLOAD_CALLED', { videoUrl: !!videoUrl });
+    logDebugInfo('HANDLE_VIDEO_UPLOAD_CALLED', { videoUrl: !!videoUrl });
     if (!videoUrl) {
-      sendDebugInfo('NO_VIDEO_URL_WAITING', { videoUrl: !!videoUrl });
+      logDebugInfo('NO_VIDEO_URL_WAITING', { videoUrl: !!videoUrl });
       // Wait a bit more for video to be ready
       await new Promise(resolve => setTimeout(resolve, 1000));
       if (!videoUrl) {
-        sendDebugInfo('NO_VIDEO_URL_AFTER_WAIT', { videoUrl: !!videoUrl });
+        logDebugInfo('NO_VIDEO_URL_AFTER_WAIT', { videoUrl: !!videoUrl });
         throw new Error('No video to upload - video URL not available');
       }
     }
 
     try {
-      sendDebugInfo('CONVERTING_VIDEO_URL_TO_FILE', { videoUrl: !!videoUrl });
+      logDebugInfo('CONVERTING_VIDEO_URL_TO_FILE', { videoUrl: !!videoUrl });
       // Convert video URL to File
       const response = await fetch(videoUrl);
       const blob = await response.blob();
       const file = new File([blob], 'recording.webm', { type: 'video/webm' });
-      sendDebugInfo('FILE_CREATED', { fileSize: file.size, fileName: file.name });
+      logDebugInfo('FILE_CREATED', { fileSize: file.size, fileName: file.name });
 
-      sendDebugInfo('UPLOADING_TO_BACKEND_API', { deviceId });
+      logDebugInfo('UPLOADING_TO_BACKEND_API', { deviceId });
       // Upload to backend API
       const { url, filename } = await uploadVideo(file, deviceId);
-      sendDebugInfo('UPLOAD_SUCCESSFUL', { url, filename });
+      logDebugInfo('UPLOAD_SUCCESSFUL', { url, filename });
 
       // Send recording ready event
       const recordingReady: RecordingReadyEvent = {
@@ -110,7 +98,7 @@ const Recorder: React.FC = () => {
         timestamp: Date.now(),
       };
 
-      sendDebugInfo('SENDING_RECORDING_READY_EVENT', { videoUrl: url, filename });
+      logDebugInfo('SENDING_RECORDING_READY_EVENT', { videoUrl: url, filename });
       sendRecordingReady(recordingReady);
       setStatus('Video yüklendi!');
       setIsUploading(false);
@@ -122,12 +110,12 @@ const Recorder: React.FC = () => {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const errorStack = error instanceof Error ? error.stack : undefined;
-      sendDebugInfo('UPLOAD_ERROR_IN_HANDLE_VIDEO_UPLOAD', { error: errorMessage, stack: errorStack });
+      logDebugInfo('UPLOAD_ERROR_IN_HANDLE_VIDEO_UPLOAD', { error: errorMessage, stack: errorStack });
       setStatus('Yükleme hatası');
       setIsUploading(false);
       setShouldUpload(false);
     }
-  }, [videoUrl, deviceId, sendRecordingReady, navigate, sendDebugInfo]);
+  }, [videoUrl, deviceId, sendRecordingReady, navigate, logDebugInfo]);
 
   // Handle upload when video is ready and shouldUpload is true
   useEffect(() => {
@@ -166,7 +154,7 @@ const Recorder: React.FC = () => {
 
   useEffect(() => {
     const cleanup = onStartRecord(async (data: StartRecordEvent) => {
-      sendDebugInfo('START_RECORD_RECEIVED', { data });
+      logDebugInfo('START_RECORD_RECEIVED', { data });
       setStatus('Kayıt başlatılıyor...');
       
       try {
@@ -187,17 +175,17 @@ const Recorder: React.FC = () => {
 
         // Auto-stop after 15 seconds
         const timeoutId = setTimeout(() => {
-          sendDebugInfo('15_SECOND_TIMEOUT_REACHED', { isRecording, videoUrl: !!videoUrl });
+          logDebugInfo('15_SECOND_TIMEOUT_REACHED', { isRecording, videoUrl: !!videoUrl });
           stopRecording();
           setStatus('Kayıt tamamlandı, yükleniyor...');
           setShouldUpload(true); // Trigger upload when video is ready
-          sendDebugInfo('SHOULD_UPLOAD_SET_TO_TRUE', { shouldUpload: true });
+          logDebugInfo('SHOULD_UPLOAD_SET_TO_TRUE', { shouldUpload: true });
           
           // Backup timer - try upload even if video URL not ready
           setTimeout(() => {
-            sendDebugInfo('BACKUP_UPLOAD_TIMER_TRIGGERED', { shouldUpload, isUploading });
-            if (shouldUpload && !isUploading) {
-              sendDebugInfo('ATTEMPTING_BACKUP_UPLOAD', { shouldUpload, isUploading });
+            logDebugInfo('BACKUP_UPLOAD_TIMER_TRIGGERED', { shouldUpload, isUploading });
+            if (shouldUpload && !isUploading && videoUrl) {
+              logDebugInfo('ATTEMPTING_BACKUP_UPLOAD', { shouldUpload, isUploading });
               // Call performUpload directly instead of setting state
               performUpload().catch(() => {
                 setStatus('Yükleme hatası');
@@ -220,7 +208,7 @@ const Recorder: React.FC = () => {
     });
 
     return cleanup;
-  }, [onStartRecord, startRecording, stopRecording, isRecording]);
+  }, [onStartRecord, startRecording, stopRecording, isRecording, logDebugInfo, performUpload]);
 
   const error = socketError || recorderError;
 
@@ -242,88 +230,90 @@ const Recorder: React.FC = () => {
   }
 
   return (
-    <div className="card">
-      <h1 className="title">📱 Video Kiosk</h1>
-      <p className="subtitle">iPhone Kayıt Cihazı</p>
-      
-      <div className={`status ${isRecording ? 'recording' : isUploading ? 'uploading' : isRegistered ? 'ready' : ''}`}>
-        {status}
-      </div>
-
-      {permissionStatus === 'denied' && (
-        <div className="permission-warning">
-          <p>⚠️ Kamera ve mikrofon izni reddedildi. Lütfen tarayıcı ayarlarından izinleri etkinleştirin.</p>
+    <ErrorBoundary>
+      <div className="card">
+        <h1 className="title">📱 Video Kiosk</h1>
+        <p className="subtitle">iPhone Kayıt Cihazı</p>
+        
+        <div className={`status ${isRecording ? 'recording' : isUploading ? 'uploading' : isRegistered ? 'ready' : ''}`}>
+          {status}
         </div>
-      )}
 
-      {permissionStatus === 'prompt' && (
-        <div className="permission-info">
-          <p>📱 Kayıt başladığında kamera ve mikrofon izni istenecek.</p>
+        {permissionStatus === 'denied' && (
+          <div className="permission-warning">
+            <p>⚠️ Kamera ve mikrofon izni reddedildi. Lütfen tarayıcı ayarlarından izinleri etkinleştirin.</p>
+          </div>
+        )}
+
+        {permissionStatus === 'prompt' && (
+          <div className="permission-info">
+            <p>📱 Kayıt başladığında kamera ve mikrofon izni istenecek.</p>
+          </div>
+        )}
+
+        {countdown !== null && countdown > 0 && (
+          <div className="countdown">
+            {countdown}
+          </div>
+        )}
+
+        {!isConnected && (
+          <div className="loading"></div>
+        )}
+
+        <div className="video-container" style={{ display: isRecording ? 'block' : 'none' }}>
+          <canvas 
+            ref={canvasRef}
+            style={{ width: '100%', height: 'auto' }}
+          />
+          {isRecording && (
+            <div className="recording-indicator">
+              ● KAYIT
+            </div>
+          )}
         </div>
-      )}
 
-      {countdown !== null && countdown > 0 && (
-        <div className="countdown">
-          {countdown}
-        </div>
-      )}
+        {videoUrl && !isRecording && (
+          <div>
+            <video 
+              src={videoUrl} 
+              controls 
+              className="video-preview"
+            />
+            <button 
+              className="button" 
+              onClick={clearRecording}
+              style={{ marginTop: '1rem' }}
+            >
+              Temizle
+            </button>
+          </div>
+        )}
 
-      {!isConnected && (
-        <div className="loading"></div>
-      )}
+        {isUploading && (
+          <div className="status uploading">
+            <div className="loading"></div>
+            <p>Video yükleniyor...</p>
+          </div>
+        )}
 
-      <div className="video-container" style={{ display: isRecording ? 'block' : 'none' }}>
-        <canvas 
-          ref={canvasRef}
-          style={{ width: '100%', height: 'auto' }}
-        />
-        {isRecording && (
-          <div className="recording-indicator">
-            ● KAYIT
+        {shouldUpload && !videoUrl && !isUploading && (
+          <div className="permission-warning">
+            <p>⚠️ Video işleniyor, lütfen bekleyin...</p>
+            <button 
+              className="button" 
+              onClick={() => {
+                logDebugInfo('MANUAL_UPLOAD_TRIGGER_CLICKED', { shouldUpload, videoUrl: !!videoUrl, isUploading });
+                setShouldUpload(true);
+              }}
+              style={{ marginTop: '1rem' }}
+            >
+              Manuel Yükleme
+            </button>
           </div>
         )}
       </div>
-
-      {videoUrl && !isRecording && (
-        <div>
-          <video 
-            src={videoUrl} 
-            controls 
-            className="video-preview"
-          />
-          <button 
-            className="button" 
-            onClick={clearRecording}
-            style={{ marginTop: '1rem' }}
-          >
-            Temizle
-          </button>
-        </div>
-      )}
-
-      {isUploading && (
-        <div className="status uploading">
-          <div className="loading"></div>
-          <p>Video yükleniyor...</p>
-        </div>
-      )}
-
-      {shouldUpload && !videoUrl && !isUploading && (
-        <div className="permission-warning">
-          <p>⚠️ Video işleniyor, lütfen bekleyin...</p>
-          <button 
-            className="button" 
-            onClick={() => {
-              sendDebugInfo('MANUAL_UPLOAD_TRIGGER_CLICKED', { shouldUpload, videoUrl: !!videoUrl, isUploading });
-              setShouldUpload(true);
-            }}
-            style={{ marginTop: '1rem' }}
-          >
-            Manuel Yükleme
-          </button>
-        </div>
-      )}
-    </div>
+    </ErrorBoundary>
   );
 };
 

@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { withRetry, retryConditions } from '../utils/retryUtils';
+import { sendDebugInfo } from '../utils/debugLogger';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -20,25 +22,57 @@ export const uploadVideo = async (file: File, deviceId: string): Promise<{ url: 
     timestamp: new Date().toISOString()
   };
   
-  // Send debug info to backend
-  try {
-    await fetch(`${BACKEND_URL}/api/debug`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'UPLOAD_START',
-        deviceId,
-        data: debugInfo,
-        timestamp: new Date().toISOString()
-      })
+  // Send debug info to backend using optimized logger
+  await sendDebugInfo('UPLOAD_START', deviceId, debugInfo);
+  
+  // Convert file to base64 using a more memory-efficient approach
+  const arrayBuffer = await file.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+  let binaryString = '';
+  const chunkSize = 8192; // Process in chunks to avoid stack overflow
+  
+  // Use a more memory-efficient approach for very large files
+  if (uint8Array.length > 50 * 1024 * 1024) { // 50MB threshold
+    // For very large files, use a different approach
+    const reader = new FileReader();
+    return new Promise((resolve, reject) => {
+      reader.onload = async () => {
+        const base64String = (reader.result as string).split(',')[1];
+        // Continue with upload...
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/upload`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              videoBlob: base64String,
+              filename: file.name,
+              deviceId: deviceId,
+              debugInfo: debugInfo,
+              base64Info: { base64Size: base64String.length, originalSize: file.size }
+            }),
+          });
+          // Handle response...
+          if (!response.ok) {
+            throw new Error(`Upload failed: ${response.statusText}`);
+          }
+          const data = await response.json();
+          resolve({ url: data.videoUrl, filename: data.filename });
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
-  } catch (e) {
-    // Ignore debug logging errors
   }
   
-  // Convert file to base64
-  const arrayBuffer = await file.arrayBuffer();
-  const base64String = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+  // For smaller files, use chunked processing
+  for (let i = 0; i < uint8Array.length; i += chunkSize) {
+    const chunk = uint8Array.slice(i, i + chunkSize);
+    binaryString += String.fromCharCode(...chunk);
+  }
+  
+  const base64String = btoa(binaryString);
   
   const base64Info = {
     base64Size: base64String.length,
@@ -47,34 +81,30 @@ export const uploadVideo = async (file: File, deviceId: string): Promise<{ url: 
   };
   
   // Send base64 conversion debug info to backend
-  try {
-    await fetch(`${BACKEND_URL}/api/debug`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'BASE64_CONVERSION',
-        deviceId,
-        data: base64Info,
-        timestamp: new Date().toISOString()
-      })
-    });
-  } catch (e) {
-    // Ignore debug logging errors
-  }
+  await sendDebugInfo('BASE64_CONVERSION', deviceId, base64Info);
   
-  const response = await fetch(`${BACKEND_URL}/api/upload`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await withRetry(
+    async () => {
+      return await fetch(`${BACKEND_URL}/api/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoBlob: base64String,
+          filename: file.name,
+          deviceId: deviceId,
+          debugInfo: debugInfo,
+          base64Info: base64Info
+        }),
+      });
     },
-    body: JSON.stringify({
-      videoBlob: base64String,
-      filename: file.name,
-      deviceId: deviceId,
-      debugInfo: debugInfo,
-      base64Info: base64Info
-    }),
-  });
+    {
+      maxAttempts: 3,
+      baseDelay: 1000,
+      retryCondition: retryConditions.uploadError
+    }
+  );
 
   if (!response.ok) {
     const errorDetails = {
