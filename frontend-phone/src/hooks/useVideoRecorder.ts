@@ -42,11 +42,11 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
 
       streamRef.current = stream;
 
-      // Start canvas compositing with logo
-      const compositeStream = await startCompositing(stream);
+      // Temporarily disable canvas compositing to test video recording
+      // const compositeStream = await startCompositing(stream);
 
-      // Create MediaRecorder with composite stream (includes logo)
-      const mediaRecorder = new MediaRecorder(compositeStream, {
+      // Create MediaRecorder with original stream (no logo for now)
+      const mediaRecorder = new MediaRecorder(stream, {
         mimeType: 'video/webm;codecs=vp8,opus',
       });
 
