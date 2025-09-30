@@ -38,7 +38,9 @@ router.post('/upload', async (req, res) => {
     contentType: req.get('Content-Type'),
     contentLength: req.get('Content-Length'),
     userAgent: req.get('User-Agent'),
-    ip: req.ip
+    ip: req.ip,
+    debugInfo: req.body?.debugInfo,
+    base64Info: req.body?.base64Info
   });
 
   try {
@@ -50,7 +52,8 @@ router.post('/upload', async (req, res) => {
         hasVideoBlob: !!videoBlob,
         hasFilename: !!filename,
         hasDeviceId: !!deviceId,
-        videoBlobSize: videoBlob?.length || 0
+        videoBlobSize: videoBlob?.length || 0,
+        requestBody: req.body
       });
       return res.status(400).json({
         success: false,
